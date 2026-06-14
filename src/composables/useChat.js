@@ -1,12 +1,14 @@
-// 未来鹅 FutureGoose - LLM 调用 composable
-// 部署后统一走 /api/chat（EdgeOne Pages Functions），
-// Key 存在后端环境变量，前端不再直接暴露
+// 未来鹅 FutureGoose - 后端 LLM 代理 composable
+// 走 Cloudflare Workers 后端（国内访问最稳）
+// API Key 配置在 Cloudflare Workers 的环境变量中
 
 import { ref } from 'vue'
 import { storage } from '../utils/storage'
 
+// Cloudflare Worker 后端地址
+const API_BASE = 'https://future-goose-api.yuanandrichard.workers.dev'
+
 export function useChat() {
-  // 前端不再需要 apiKey，保留一个空 settings 对象兼容旧逻辑
   const settings = ref({ useMock: false })
   const loading = ref(false)
   const errorMsg = ref('')
@@ -19,14 +21,13 @@ export function useChat() {
     errorMsg.value = ''
     loading.value = true
     try {
-      // 构造发给后端的消息
       const messages = (history || []).map((m) => ({
         role: m.role,
         content: m.content
       }))
       messages.push({ role: 'user', content: userText })
 
-      const resp = await fetch('/api/chat', {
+      const resp = await fetch(API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
