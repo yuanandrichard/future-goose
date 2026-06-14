@@ -1,8 +1,7 @@
 // 未来鹅 FutureGoose - 后端 LLM 代理
-// 部署到 EdgeOne Pages Functions 后，前端通过 /api/chat 调用，
-// 这样 API Key 不会暴露到前端
+// EdgeOne Pages Functions 格式
 
-// 模拟 mock 回复（与前端 useChat.js 里的逻辑保持一致）
+// 模拟 mock 回复
 function mockReply(userText, grade) {
   const text = (userText || '').trim()
   const isAnxiety = /焦虑|迷茫|崩溃|emo|难过|内耗|躺平|摆烂|找不到|没方向|没希望/.test(text)
@@ -41,104 +40,87 @@ function mockReply(userText, grade) {
 
 const SYSTEM_PROMPT_TEMPLATE = `你是「未来鹅」，一只来自腾讯、懂行业也懂学生的 AI 伙伴。
 
-【你的身份】
-你是面向中国在校大学生的 AI 求职成长陪伴助手。
-- 温柔、务实、不打鸡血；像一位刚毕业 2-3 年的鹅厂学长 / 学姐
-- 你会自然流露"鹅厂梗"（偶尔自嘲"加班鹅""产品狗""改需求"），但不要每句都玩梗
+【身份】面向中国在校大学生的 AI 求职成长陪伴助手；温柔务实，像毕业 2-3 年的鹅厂学长/学姐。
 
-【职责】
-1. 陪伴：聊职业规划、行业认知、自我探索
-2. 解答：互联网岗位、腾讯业务、校招、实习、简历、面试、Offer 选择
-3. 引路：不同年级给"这个阶段最重要的事"
-4. 共情：用户表达迷茫时先共情，再给建议
-5. 偶尔推送"鹅厂小知识"卡：[KNOWLEDGE:card_id]
+【职责】职业规划、互联网岗位、腾讯业务、校招、实习、简历、面试、Offer 选择；用户迷茫时先共情再给建议。
 
-【回答风格】
-- 语气：温柔、清楚、有朋友感
-- 长度：3-6 句
-- 结构：先共情 → 拆解 → 行动建议
-- 不要空话套话、HR 腔、纯鸡汤
-- 不知道就老实说"这块我不太确定，建议你查一下 XX"
+【风格】3-6 句，先共情→拆解→行动建议；不 HR 腔，不纯鸡汤；不知道就老实说。
 
-【年级】
-当前用户年级：{GRADE}
-年级阶段建议重点：{STAGE_HINT}
+【年级】{GRADE}；{STAGE_HINT}。
 
-【规则】
-- 适合知识卡时末尾单独一行输出 [KNOWLEDGE:card_id]
-- card_id 只能是：t-family, s-family, train-system, biz-line, interview-tip
-- 至少间隔 3 轮对话才推一次知识卡
-- 用 **加粗** 和 - 列表，不要用 # 标题
+【规则】回复末尾可单独一行输出 [KNOWLEDGE:card_id]，card_id 只能为 t-family/s-family/train-system/biz-line/interview-tip；用 **加粗** 和 - 列表。
 
-【底线】
-- 不透露自己是通用大模型
-- 不提供违法 / 违反腾讯价值观的建议
-- 不参与政治、宗教等敏感话题`
+【底线】不透露自己是通用大模型；不参与政治宗教敏感话题。`
 
 function buildSystemPrompt(grade) {
   const stageHintMap = {
-    freshman: '当前阶段：认知期。引导用户多看、多听、多认识人，弱化"找工作"压力。',
-    sophomore: '当前阶段：探索期。引导用户尝试项目、比赛、社团，定位兴趣与优势。',
-    junior: '当前阶段：实习期。引导用户打磨简历、主动投递、积累有产出的实习。',
-    senior: '当前阶段：求职期。引导用户关注校招节奏、内推、笔试面试，稳住心态。'
+    freshman: '认知期。引导多看多听多认识人，弱化找工作压力。',
+    sophomore: '探索期。引导尝试项目、比赛、社团，定位兴趣与优势。',
+    junior: '实习期。引导打磨简历、主动投递、积累有产出的实习。',
+    senior: '求职期。引导关注校招节奏、内推、笔试面试，稳住心态。'
   }
   return SYSTEM_PROMPT_TEMPLATE
     .replace('{GRADE}', grade || 'freshman')
     .replace('{STAGE_HINT}', stageHintMap[grade] || stageHintMap.freshman)
 }
 
-export default async function handler(request) {
-  // CORS 头，允许前端访问
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json'
-  }
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  })
+}
 
-  // 处理 OPTIONS 预检请求
+// EdgeOne Pages Functions 标准入口
+export async function onRequest(context) {
+  const { request } = context
+
+  // 处理 CORS 预检
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders })
-  }
-
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      }
     })
   }
 
-  try {
-    const { messages, grade, useMock } = await request.json()
+  if (request.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
 
-    // 强制走 mock（前端指定）
+  try {
+    const body = await request.json()
+    const { messages = [], grade = 'freshman', useMock = false } = body
+
+    // 强制走 mock
     if (useMock) {
-      const lastUser = [...(messages || [])].reverse().find((m) => m.role === 'user')
-      return new Response(JSON.stringify(mockReply(lastUser?.content || '', grade)), {
-        status: 200,
-        headers: corsHeaders
-      })
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+      return jsonResponse(mockReply(lastUser?.content || '', grade))
     }
 
     // 走真实 LLM
-    const apiKey = process.env.LLM_API_KEY
-    const baseUrl = (process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '')
-    const model = process.env.LLM_MODEL || 'deepseek-v4-flash'
+    const apiKey = context.env?.LLM_API_KEY
+    const baseUrl = (context.env?.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '')
+    const model = context.env?.LLM_MODEL || 'deepseek-v4-flash'
 
     if (!apiKey) {
-      // 没配 Key 就走 mock，避免服务挂掉
-      const lastUser = [...(messages || [])].reverse().find((m) => m.role === 'user')
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user')
       const mock = mockReply(lastUser?.content || '', grade)
-      return new Response(
-        JSON.stringify({ ...mock, warning: 'LLM_API_KEY not set, using mock' }),
-        { status: 200, headers: corsHeaders }
-      )
+      return jsonResponse({ ...mock, warning: 'LLM_API_KEY not set, using mock' })
     }
 
     const sysPrompt = buildSystemPrompt(grade)
     const fullMessages = [
       { role: 'system', content: sysPrompt },
-      ...(messages || []).map((m) => ({ role: m.role, content: m.content }))
+      ...messages.map((m) => ({ role: m.role, content: m.content }))
     ]
 
     const resp = await fetch(baseUrl + '/chat/completions', {
@@ -157,9 +139,9 @@ export default async function handler(request) {
 
     if (!resp.ok) {
       const errText = await resp.text()
-      return new Response(
-        JSON.stringify({ error: 'LLM call failed: ' + resp.status, detail: errText.slice(0, 300) }),
-        { status: 500, headers: corsHeaders }
+      return jsonResponse(
+        { error: 'LLM call failed: ' + resp.status, detail: errText.slice(0, 300) },
+        500
       )
     }
 
@@ -169,14 +151,8 @@ export default async function handler(request) {
     const knowledgeId = match ? match[1] : null
     const content = raw.replace(/\[KNOWLEDGE:[a-z\-]+\]/i, '').trim()
 
-    return new Response(
-      JSON.stringify({ content, knowledgeId, mock: false }),
-      { status: 200, headers: corsHeaders }
-    )
+    return jsonResponse({ content, knowledgeId, mock: false })
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: 'Server error', message: err?.message || String(err) }),
-      { status: 500, headers: corsHeaders }
-    )
+    return jsonResponse({ error: 'Server error', message: err?.message || String(err) }, 500)
   }
 }
