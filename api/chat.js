@@ -1,5 +1,17 @@
-// 未来鹅 FutureGoose - 后端 LLM 代理
-// EdgeOne Pages Functions 格式
+// 未来鹅 FutureGoose - EdgeOne Pages Functions 后端 LLM 代理
+// 采用 EdgeOne Pages 官方推荐的 Fetch API 风格
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  })
+}
 
 // 模拟 mock 回复
 function mockReply(userText, grade) {
@@ -16,7 +28,7 @@ function mockReply(userText, grade) {
   if (isAnxiety) {
     reply = '我懂你这种感觉～大一大二的迷茫、找方向的不确定、面试被拒的挫败……这些我都听过很多次。\n\n先深呼吸一下，我们慢慢聊。其实很多现在的鹅厂同学，当年也经历过你现在这种"什么都不确定"的阶段。这不是你的问题，是成长的常态。\n\n比起"去哪儿"，更重要的是"成为什么样的人"。我们一步步来。'
   } else if (isInterview) {
-    reply = '校招是一场信息战 + 心态战，先把节奏摸清楚：\n- **提前批**（7-8 月）：竞争小、HC 多，但流程快\n- **正式批**（8-10 月）：岗位全，但内卷也最多\n- **内推**：找师兄师姐或脉脉上的鹅厂同学，比海投效率高 10 倍\n\n面试准备三件事：① 简历上每段经历都能用 STAR 法则讲 ② 手写 5 个"你做过的最难决策" ③ 至少 2 次模拟面试（找同学或 Mentor）'
+    reply = '校招是一场信息战 + 心态战，先把节奏摸清楚：\n- **提前批**（7-8 月）：竞争小、HC 多，但流程快\n- **正式批**（8-10 月）：岗位全，但内卷也最多\n- **内推**：找师兄师姐或脉上的鹅厂同学，比海投效率高 10 倍\n\n面试准备三件事：① 简历上每段经历都能用 STAR 法则讲 ② 手写 5 个"你做过的最难决策" ③ 至少 2 次模拟面试（找同学或 Mentor）'
     knowledge = 'interview-tip'
   } else if (isIntern) {
     reply = '大三这一年，**一段有产出的实习**比什么都重要。\n\n准备路径：\n- 简历：1 页纸，把项目 / 比赛 / 课程设计都按"做了什么 / 结果如何"写出来\n- 投递：腾讯校招官网 + 牛客 / 脉脉 + 内推，**至少投 30 家**\n- 选 Offer：看 3 件事——业务是不是核心、团队能不能学到东西、能不能转正'
@@ -64,31 +76,28 @@ function buildSystemPrompt(grade) {
     .replace('{STAGE_HINT}', stageHintMap[grade] || stageHintMap.freshman)
 }
 
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    }
-  })
-}
-
-// EdgeOne Pages Functions 标准入口
-export async function onRequest(context) {
-  const { request } = context
-
+// EdgeOne Pages Functions - Fetch API 风格
+export default async function handler(request, env) {
   // 处理 CORS 预检
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
         'Access-Control-Allow-Headers': 'Content-Type'
       }
+    })
+  }
+
+  // 健康检查 / 调试端点
+  if (request.method === 'GET') {
+    return jsonResponse({
+      ok: true,
+      message: '未来鹅 FutureGoose API is running',
+      hasKey: !!env?.LLM_API_KEY,
+      model: env?.LLM_MODEL || 'not set',
+      baseUrl: env?.LLM_BASE_URL || 'not set'
     })
   }
 
@@ -100,16 +109,14 @@ export async function onRequest(context) {
     const body = await request.json()
     const { messages = [], grade = 'freshman', useMock = false } = body
 
-    // 强制走 mock
     if (useMock) {
       const lastUser = [...messages].reverse().find((m) => m.role === 'user')
       return jsonResponse(mockReply(lastUser?.content || '', grade))
     }
 
-    // 走真实 LLM
-    const apiKey = context.env?.LLM_API_KEY
-    const baseUrl = (context.env?.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '')
-    const model = context.env?.LLM_MODEL || 'deepseek-v4-flash'
+    const apiKey = env?.LLM_API_KEY
+    const baseUrl = (env?.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '')
+    const model = env?.LLM_MODEL || 'deepseek-v4-flash'
 
     if (!apiKey) {
       const lastUser = [...messages].reverse().find((m) => m.role === 'user')
