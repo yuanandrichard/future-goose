@@ -1,0 +1,21 @@
+{
+  "name": "future-goose",
+  "version": "1.0.0",
+  "private": true,
+  "description": "未来鹅 FutureGoose - 面向大学生的 AI 求职成长陪伴产品 Demo",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.21",
+    "tdesign-vue-next": "^1.9.0",
+    "tdesign-icons-vue-next": "^0.2.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.0"
+  }
+}
